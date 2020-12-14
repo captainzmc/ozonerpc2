@@ -1,0 +1,183 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+   <property>
+      <name>hdds.datanode.dir</name>
+      <value>/data/ozone-physical,/data1/ozone-physical,/data2/ozone-physical,/data3/ozone-physical,/data4/ozone-physical,/data5/ozone-physical,/data6/ozone-physical,/data7/ozone-physical,/data8/ozone-physical,/data9/ozone-physical,/data10/ozone-physical,/data11/ozone-physical</value>
+   </property>
+   <property>
+    <name>dfs.container.ratis.datanode.storage.dir</name>
+    <value>/data/ozone-physical-ratis,/data1/ozone-physical-ratis,/data2/ozone-physical-ratis,/data3/ozone-physical-ratis,/data4/ozone-physical-ratis,/data5/ozone-physical-ratis,/data6/ozone-physical-ratis,/data7/ozone-physical-ratis,/data8/ozone-physical-ratis,/data9/ozone-physical-ratis,/data10/ozone-physical-ratis,/data11/ozone-physical-ratis</value>
+  </property>
+   <property>
+      <name>ozone.scm.datanode.id.dir</name>
+      <value>/data/ozone-physical-cluster/data/id</value>
+   </property>
+   <property>
+      <name>ozone.metadata.dirs</name>
+      <value>/data/ozone-physical-cluster/data/metadata</value>
+   </property>
+   <property>
+      <name>ozone.om.address</name>
+      <value>ip:9862</value>
+   </property>
+   <property>
+      <name>ozone.scm.client.address</name>
+      <value>ip:9860</value>
+   </property>
+   <property>
+      <name>ozone.scm.names</name>
+      <value>ip.38</value>
+   </property>
+   <property>
+      <name>ozone.csi.s3g.address</name>
+      <value>http://ip:9878</value>
+   </property>
+   <property>
+      <name>ozone.csi.socket</name>
+      <value>/var/lib/csi/csi.sock</value>
+   </property>
+   <property>
+      <name>ozone.csi.owner</name>
+      <value>hadoop</value>
+   </property>
+   <property>
+      <name>ozone.enabled</name>
+      <value>true</value>
+   </property>
+   <property>
+      <name>ozone.metastore.rocksdb.statistics</name>
+      <value>OFF</value>
+   </property>
+   <property>
+      <name>ozone.scm.pipeline.owner.container.count</name>
+      <value>1</value>
+   </property>
+   <property>
+      <name>dfs.container.ratis.num.write.chunk.threads</name>
+      <value>20</value>
+   </property>
+   <property>
+      <name>ozone.client.checksum.type</name>
+      <value>NONE</value>
+   </property>
+   <property>
+      <name>raft.server.log.corruption.policy</name>
+      <value>WARN_AND_RETURN</value>
+   </property>
+   <property>
+      <name>ozone.datanode.pipeline.limit</name>
+      <value>3</value>
+   </property>
+   <property>
+      <name>ozone.scm.pipeline.leader-choose.policy</name>
+      <value>org.apache.hadoop.hdds.scm.pipeline.leader.choose.algorithms.MinLeaderCountChoosePolicy</value>
+   </property>
+   <property>
+      <name>ozone.scm.pipeline.creation.auto.factor.one</name>
+      <value>false</value>
+   </property>
+   <property>
+      <name>hdds.prometheus.endpoint.enabled</name>
+      <value>false</value>
+   </property>
+   <property>
+      <name>hdds.tracing.enabled</name>
+      <value>false</value>
+   </property>
+   <property>
+    <name>rpc.metrics.quantile.enable</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>rpc.metrics.percentiles.intervals</name>
+    <value>60,300</value>
+  </property>
+  <property>
+    <name>ozone.scm.handler.count.key</name>
+    <value>200</value>
+  </property>
+  <property>
+    <name>dfs.datanode.use.datanode.hostname</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hdds.profiler.endpoint.enabled</name>
+    <value>false</value>
+  </property>
+   <property>
+    <name>ozone.recon.address</name>
+    <value>ip:9891</value>
+  </property>
+  <property>
+    <name>ozone.recon.http-address</name>
+    <value>ip:80</value>
+  </property>
+  <property>
+    <name>ozone.recon.db.dir</name>
+    <value>/data1/recon-db</value>
+  </property>
+  <property>
+    <name>recon.om.snapshot.task.interval.delay</name>
+    <value>1m</value>
+  </property>
+    <property>
+    <name>ozone.client.checksum.type</name>
+    <value>NONE</value>
+  </property>
+    <property>
+    <name>raft.server.log.corruption.policy</name>
+    <value>WARN_AND_RETURN</value>
+  </property>
+    <property>
+    <name>hdds.ratis.client.retry.policy</name>
+    <value>org.apache.hadoop.hdds.ratis.retrypolicy.RetryLimitedPolicyCreator</value>
+  </property>
+    <property>
+    <name>hdds.ratis.client.retrylimited.max.retries</name>
+    <value>5</value>
+  </property>
+    <property>
+    <name>hdds.ratis.raft.client.rpc.request.timeout</name>
+    <value>10s</value>
+  </property>
+    <property>
+    <name>hdds.ratis.raft.client.rpc.watch.request.timeout</name>
+    <value>30s</value>
+  </property>
+    <property>
+    <name>ozone.scm.heartbeat.rpc-timeout</name>
+    <value>20s</value>
+  </property>
+  <property>
+    <name>ozone.scm.stale.node.interval</name>
+    <value>15m</value>
+  </property>
+  <property>
+    <name>ozone.scm.dead.node.interval</name>
+    <value>30m</value>
+  </property>
+    <property>
+    <name>dfs.container.ratis.num.write.chunk.threads.per.volume</name>
+    <value>20</value>
+  </property>
+</configuration>
