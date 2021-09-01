@@ -17,7 +17,11 @@
  */
 package org.apache.hadoop.ozone.examples;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
 import org.apache.hadoop.hdds.client.ReplicationType;
 import org.apache.hadoop.hdds.conf.OzoneConfiguration;
@@ -26,14 +30,17 @@ import org.apache.hadoop.ozone.client.OzoneBucket;
 import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.client.OzoneVolume;
+import org.apache.hadoop.ozone.client.io.OzoneDataStreamOutput;
 import org.apache.hadoop.ozone.client.io.OzoneInputStream;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 import org.apache.hadoop.security.UserGroupInformation;
+
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -53,6 +60,7 @@ import java.util.concurrent.Executors;
  */
 public class OzoneRpc {
   private static long numFiles;
+  private static int chunkSize;
   private static long fileSizeInBytes = 128000000;
   private static long bufferSizeInBytes = 4000000;
   private static String[] storageDir = new String[]{"/data/ratis/", "/data1/ratis/", "/data2/ratis/", "/data3/ratis/",
@@ -135,26 +143,28 @@ public class OzoneRpc {
   }
 
   private static Map<String, CompletableFuture<Boolean>> writeByHeapByteBuffer(
-      List<String> paths, List<OzoneOutputStream> outs, ExecutorService executor) {
+      List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
     Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
 
     for(int i = 0; i < paths.size(); i ++) {
+
       String path = paths.get(i);
-      OzoneOutputStream out = outs.get(i);
+      OzoneDataStreamOutput out = outs.get(i);
       final CompletableFuture<Boolean> future = new CompletableFuture<>();
       CompletableFuture.supplyAsync(() -> {
         File file = new File(path);
-        try (FileInputStream fis = new FileInputStream(file)) {
-          int bytesToRead = (int)bufferSizeInBytes;
-          byte[] buffer = new byte[bytesToRead];
-          long offset = 0L;
-          while(fis.read(buffer, 0, bytesToRead) > 0) {
-            out.write(buffer);
-            offset += bytesToRead;
-            bytesToRead = (int) Math.min(fileSizeInBytes - offset, bufferSizeInBytes);
-            if (bytesToRead > 0) {
-              buffer = new byte[bytesToRead];
-            }
+        try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
+          FileChannel ch = raf.getChannel();
+          long len = raf.length();
+          long off = 0;
+          while (len > 0) {
+            long writeLen = Math.min(len, chunkSize);
+            ByteBuffer segment =
+                ch.map(FileChannel.MapMode.READ_ONLY, off, writeLen);
+            ByteBuf buf = Unpooled.wrappedBuffer(segment);
+            out.write(buf);
+            off += writeLen;
+            len -= writeLen;
           }
           out.close();
           future.complete(true);
@@ -170,11 +180,47 @@ public class OzoneRpc {
 
     return fileMap;
   }
+//private static Map<String, CompletableFuture<Boolean>> writeByHeapByteBuffer(
+//    List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
+//  Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
+//
+//  for(int i = 0; i < paths.size(); i ++) {
+//
+//    String path = paths.get(i);
+//    OzoneDataStreamOutput out = outs.get(i);
+//    final CompletableFuture<Boolean> future = new CompletableFuture<>();
+//    CompletableFuture.supplyAsync(() -> {
+//      File file = new File(path);
+//      try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
+//        FileChannel in = raf.getChannel();
+//        for (long offset = 0L; offset < file.length(); ) {
+//          ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer(chunkSize);
+//            int bytesRead = buf.writeBytes(in, chunkSize);
+//            out.write(buf);
+//            offset +=bytesRead;
+//            if (buf != null && bytesRead>0) {
+//              buf.release();
+//            }
+//        }
+//        out.close();
+//        future.complete(true);
+//      } catch (Throwable e) {
+//        future.complete(false);
+//      }
+//
+//      return future;
+//    }, executor);
+//
+//    fileMap.put(path, future);
+//  }
+//
+//  return fileMap;
+//}
 
   static OzoneClient getOzoneClient(boolean secure) throws IOException {
     OzoneConfiguration conf = new OzoneConfiguration();
     // TODO: If you don't have OM HA configured, change the following as appropriate.
-    conf.set("ozone.om.address", "ip:9862");
+    conf.set("ozone.om.address", "9.29.173.57:9862");
     return OzoneClientFactory.getRpcClient(conf);
   }
 
@@ -186,7 +232,9 @@ public class OzoneRpc {
       String testVolumeName = args[0];
       String testBucketName = args[1];
       numFiles = Integer.parseInt(args[2]);
+      chunkSize = Integer.parseInt(args[3]);
       System.out.println("numFiles:" + numFiles);
+      System.out.println("chunkSize:" + chunkSize);
       createDirs();
       final ExecutorService executor = Executors.newFixedThreadPool(1000);
 
@@ -208,10 +256,12 @@ public class OzoneRpc {
       OzoneBucket bucket = volume.getBucket(testBucketName);
       System.out.println("Bucket " + testBucketName + " created.");
 
-      List<OzoneOutputStream> outs = new ArrayList<OzoneOutputStream>();
+      List<OzoneDataStreamOutput> outs = new ArrayList<OzoneDataStreamOutput>();
+      ReplicationConfig config =
+          ReplicationConfig.fromTypeAndFactor(ReplicationType.RATIS, ReplicationFactor.THREE);
       for (int i = 0; i < paths.size(); i ++) {
-        OzoneOutputStream out = bucket.createKey("ozonekey_" + i, 128000000,
-            ReplicationType.RATIS, ReplicationFactor.THREE, new HashMap<>());
+        OzoneDataStreamOutput out = bucket.createStreamKey("ozonekey_" + i, 128000000,
+            config, new HashMap<>());
         outs.add(out);
       }
 
