@@ -17,9 +17,6 @@
  */
 package org.apache.hadoop.ozone.examples;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.buffer.Unpooled;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
@@ -31,13 +28,9 @@ import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.io.OzoneDataStreamOutput;
-import org.apache.hadoop.ozone.client.io.OzoneInputStream;
-import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
-import org.apache.hadoop.security.UserGroupInformation;
 
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -142,7 +135,7 @@ public class OzoneRpc {
     return offset;
   }
 
-  private static Map<String, CompletableFuture<Boolean>> writeByHeapByteBuffer(
+  private static Map<String, CompletableFuture<Boolean>> writeByMappedByteBuffer(
       List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
     Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
 
@@ -159,10 +152,8 @@ public class OzoneRpc {
           long off = 0;
           while (len > 0) {
             long writeLen = Math.min(len, chunkSize);
-            ByteBuffer segment =
-                ch.map(FileChannel.MapMode.READ_ONLY, off, writeLen);
-            ByteBuf buf = Unpooled.wrappedBuffer(segment);
-            out.write(buf);
+            ByteBuffer bb = ch.map(FileChannel.MapMode.READ_ONLY, off, writeLen);
+            out.write(bb);
             off += writeLen;
             len -= writeLen;
           }
@@ -180,42 +171,6 @@ public class OzoneRpc {
 
     return fileMap;
   }
-//private static Map<String, CompletableFuture<Boolean>> writeByHeapByteBuffer(
-//    List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
-//  Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
-//
-//  for(int i = 0; i < paths.size(); i ++) {
-//
-//    String path = paths.get(i);
-//    OzoneDataStreamOutput out = outs.get(i);
-//    final CompletableFuture<Boolean> future = new CompletableFuture<>();
-//    CompletableFuture.supplyAsync(() -> {
-//      File file = new File(path);
-//      try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
-//        FileChannel in = raf.getChannel();
-//        for (long offset = 0L; offset < file.length(); ) {
-//          ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer(chunkSize);
-//            int bytesRead = buf.writeBytes(in, chunkSize);
-//            out.write(buf);
-//            offset +=bytesRead;
-//            if (buf != null && bytesRead>0) {
-//              buf.release();
-//            }
-//        }
-//        out.close();
-//        future.complete(true);
-//      } catch (Throwable e) {
-//        future.complete(false);
-//      }
-//
-//      return future;
-//    }, executor);
-//
-//    fileMap.put(path, future);
-//  }
-//
-//  return fileMap;
-//}
 
   static OzoneClient getOzoneClient(boolean secure) throws IOException {
     OzoneConfiguration conf = new OzoneConfiguration();
@@ -267,7 +222,7 @@ public class OzoneRpc {
 
       long start = System.currentTimeMillis();
       // Write key with random name.
-      Map<String, CompletableFuture<Boolean>> map = writeByHeapByteBuffer(paths, outs, executor);
+      Map<String, CompletableFuture<Boolean>> map = writeByMappedByteBuffer(paths, outs, executor);
 
       for (String path : map.keySet()) {
         CompletableFuture<Boolean> future = map.get(path);
