@@ -36,12 +36,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -82,8 +77,11 @@ public class OzoneRpc {
     CompletableFuture.supplyAsync(() -> {
       try {
         future.complete(
-            writeFile(path, fileSizeInBytes, bufferSizeInBytes, new Random().nextInt(127) + 1));
+            writeFileFast(path, fileSizeInBytes));
+            //writeFile(path, fileSizeInBytes, bufferSizeInBytes, new Random().nextInt(127) + 1));
       } catch (IOException e) {
+        future.completeExceptionally(e);
+      } catch (InterruptedException e) {
         future.completeExceptionally(e);
       }
       return future;
@@ -110,6 +108,20 @@ public class OzoneRpc {
     }
 
     return paths;
+  }
+
+  protected static long writeFileFast(String path, long fileSize) throws InterruptedException, IOException {
+    long mbytes = (fileSize >> 20) + 1;
+
+    String[] cmd = {"/bin/bash", "-c", "dd if=<(openssl enc -aes-256-ctr -pass pass:\"$(dd if=/dev/urandom bs=128 count=1 2>/dev/null | base64)\" -nosalt < /dev/zero) of=" + path + " bs=1M count=" + mbytes + " iflag=fullblock"};
+    Process ps = Runtime.getRuntime().exec(cmd);
+    ps.waitFor();
+
+    String[] cmd2 = {"/usr/bin/truncate", "--size=" + fileSize, "path"};
+    Process ps2 = Runtime.getRuntime().exec(cmd2);
+    ps2.waitFor();
+
+    return fileSize;
   }
 
   protected static long writeFile(String path, long fileSize, long bufferSize, int random) throws IOException {
@@ -219,6 +231,12 @@ public class OzoneRpc {
             config, new HashMap<>());
         outs.add(out);
       }
+
+
+      // wait for sync signal
+      System.out.println("=== input a new line to start the test ===");
+      System.out.print(">>> ");
+      new Scanner(System.in).nextLine();
 
       long start = System.currentTimeMillis();
       // Write key with random name.
