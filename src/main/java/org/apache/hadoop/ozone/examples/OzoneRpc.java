@@ -28,9 +28,11 @@ import org.apache.hadoop.ozone.client.OzoneClient;
 import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.io.OzoneDataStreamOutput;
+import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -147,6 +149,43 @@ public class OzoneRpc {
     return offset;
   }
 
+  private static Map<String, CompletableFuture<Boolean>> writeByHeapByteBuffer(
+          List<String> paths, List<OzoneOutputStream> outs, ExecutorService executor) {
+    Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
+
+    for(int i = 0; i < paths.size(); i ++) {
+      String path = paths.get(i);
+      OzoneOutputStream out = outs.get(i);
+      final CompletableFuture<Boolean> future = new CompletableFuture<>();
+      CompletableFuture.supplyAsync(() -> {
+        File file = new File(path);
+        try (FileInputStream fis = new FileInputStream(file)) {
+          int bytesToRead = (int)bufferSizeInBytes;
+          byte[] buffer = new byte[bytesToRead];
+          long offset = 0L;
+          while(fis.read(buffer, 0, bytesToRead) > 0) {
+            out.write(buffer);
+            offset += bytesToRead;
+            bytesToRead = (int) Math.min(fileSizeInBytes - offset, bufferSizeInBytes);
+            if (bytesToRead > 0) {
+              buffer = new byte[bytesToRead];
+            }
+          }
+          out.close();
+          future.complete(true);
+        } catch (Throwable e) {
+          future.complete(false);
+        }
+
+        return future;
+      }, executor);
+
+      fileMap.put(path, future);
+    }
+
+    return fileMap;
+  }
+
   private static Map<String, CompletableFuture<Boolean>> writeByMappedByteBuffer(
       List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
     Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
@@ -204,6 +243,13 @@ public class OzoneRpc {
       System.out.println("chunkSize:" + chunkSize);
       createDirs();
       final ExecutorService executor = Executors.newFixedThreadPool(1000);
+      final boolean streamApi = (chunkSize > 0);
+
+      if (streamApi) {
+        System.out.println("=== using stream api ===");
+      } else {
+        System.out.println("=== using async api ===");
+      }
 
       List<String> paths = generateFiles(executor);
       dropCache();
@@ -223,13 +269,23 @@ public class OzoneRpc {
       OzoneBucket bucket = volume.getBucket(testBucketName);
       System.out.println("Bucket " + testBucketName + " created.");
 
-      List<OzoneDataStreamOutput> outs = new ArrayList<OzoneDataStreamOutput>();
       ReplicationConfig config =
           ReplicationConfig.fromTypeAndFactor(ReplicationType.RATIS, ReplicationFactor.THREE);
-      for (int i = 0; i < paths.size(); i ++) {
-        OzoneDataStreamOutput out = bucket.createStreamKey("ozonekey_" + i, 128000000,
-            config, new HashMap<>());
-        outs.add(out);
+
+      List<OzoneDataStreamOutput> streamOuts = new ArrayList<>();
+      List<OzoneOutputStream> asyncOuts = new ArrayList<>();
+      if (streamApi) {
+        for (int i = 0; i < paths.size(); i++) {
+          OzoneDataStreamOutput out = bucket.createStreamKey("ozonekey_" + i, 128000000,
+              config, new HashMap<>());
+          streamOuts.add(out);
+        }
+      } else {
+        for (int i = 0; i < paths.size(); i++) {
+          OzoneOutputStream out = bucket.createKey("ozonekey_" + i, 128000000,
+              config, new HashMap<>());
+          asyncOuts.add(out);
+        }
       }
 
 
@@ -240,7 +296,12 @@ public class OzoneRpc {
 
       long start = System.currentTimeMillis();
       // Write key with random name.
-      Map<String, CompletableFuture<Boolean>> map = writeByMappedByteBuffer(paths, outs, executor);
+      Map<String, CompletableFuture<Boolean>> map;
+      if (streamApi) {
+        map = writeByMappedByteBuffer(paths, streamOuts, executor);
+      } else {
+        map = writeByHeapByteBuffer(paths, asyncOuts, executor);
+      }
 
       for (String path : map.keySet()) {
         CompletableFuture<Boolean> future = map.get(path);
