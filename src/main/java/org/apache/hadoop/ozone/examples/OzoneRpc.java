@@ -29,6 +29,8 @@ import org.apache.hadoop.ozone.client.OzoneClientFactory;
 import org.apache.hadoop.ozone.client.OzoneVolume;
 import org.apache.hadoop.ozone.client.io.OzoneDataStreamOutput;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
+import org.apache.ratis.thirdparty.io.netty.buffer.ByteBuf;
+import org.apache.ratis.thirdparty.io.netty.buffer.PooledByteBufAllocator;
 
 
 import java.io.File;
@@ -223,6 +225,38 @@ public class OzoneRpc {
     return fileMap;
   }
 
+  private static Map<String, CompletableFuture<Boolean>> writeByDirectByteBuffer(
+    List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
+  Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
+  for(int i = 0; i < paths.size(); i ++) {
+    String path = paths.get(i);
+    OzoneDataStreamOutput out = outs.get(i);
+    final CompletableFuture<Boolean> future = new CompletableFuture<>();
+    CompletableFuture.supplyAsync(() -> {
+      File file = new File(path);
+      ByteBuffer byteBuffer = ByteBuffer.allocateDirect(chunkSize);
+      try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
+        FileChannel in = raf.getChannel();
+        for (long offset = 0L; offset < file.length(); ) {
+          byteBuffer.clear();
+          int readByte = in.read(byteBuffer);
+          byteBuffer.flip();
+          out.write(byteBuffer);
+          offset +=readByte;
+        }
+        out.close();
+        future.complete(true);
+      } catch (Throwable e) {
+        future.complete(false);
+      }
+      return future;
+    }, executor);
+
+    fileMap.put(path, future);
+  }
+  return fileMap;
+}
+
   static OzoneClient getOzoneClient(boolean secure) throws IOException {
     OzoneConfiguration conf = new OzoneConfiguration();
     // TODO: If you don't have OM HA configured, change the following as appropriate.
@@ -239,14 +273,26 @@ public class OzoneRpc {
       String testBucketName = args[1];
       numFiles = Integer.parseInt(args[2]);
       chunkSize = Integer.parseInt(args[3]);
+      if(args.length > 4) {
+        fileSizeInBytes = Long.parseLong(args[4]);
+      }
+      String type = "";
+      if(args.length > 5) {
+        type = args[5];
+      }
+
       System.out.println("numFiles:" + numFiles);
       System.out.println("chunkSize:" + chunkSize);
       createDirs();
       final ExecutorService executor = Executors.newFixedThreadPool(1000);
-      final boolean streamApi = (chunkSize > 0);
+      final boolean mapApi = (chunkSize > 0 && type.contains("map") );
+      final boolean directApi = (chunkSize > 0 && type.contains("direct"));
+      final boolean buf = (chunkSize > 0 && type.contains("buf") );
 
-      if (streamApi) {
-        System.out.println("=== using stream api ===");
+      if (mapApi) {
+        System.out.println("=== using stream api by MappedByteBuffer===");
+      } else if (directApi) {
+        System.out.println("=== using stream api by DirectByteBuffer===");
       } else {
         System.out.println("=== using async api ===");
       }
@@ -274,7 +320,7 @@ public class OzoneRpc {
 
       List<OzoneDataStreamOutput> streamOuts = new ArrayList<>();
       List<OzoneOutputStream> asyncOuts = new ArrayList<>();
-      if (streamApi) {
+      if (mapApi || directApi) {
         for (int i = 0; i < paths.size(); i++) {
           OzoneDataStreamOutput out = bucket.createStreamKey("ozonekey_" + i, 128000000,
               config, new HashMap<>());
@@ -297,8 +343,10 @@ public class OzoneRpc {
       long start = System.currentTimeMillis();
       // Write key with random name.
       Map<String, CompletableFuture<Boolean>> map;
-      if (streamApi) {
+      if (mapApi) {
         map = writeByMappedByteBuffer(paths, streamOuts, executor);
+      } else if (directApi) {
+        map = writeByDirectByteBuffer(paths, streamOuts, executor);
       } else {
         map = writeByHeapByteBuffer(paths, asyncOuts, executor);
       }
