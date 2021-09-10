@@ -257,6 +257,40 @@ public class OzoneRpc {
   return fileMap;
 }
 
+  private static Map<String, CompletableFuture<Boolean>> writeByDirectByteBuf(
+      List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
+    Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
+    for(int i = 0; i < paths.size(); i ++) {
+      String path = paths.get(i);
+      OzoneDataStreamOutput out = outs.get(i);
+      final CompletableFuture<Boolean> future = new CompletableFuture<>();
+      CompletableFuture.supplyAsync(() -> {
+        File file = new File(path);
+        ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer(chunkSize);
+        try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
+          FileChannel in = raf.getChannel();
+
+          for (long offset = 0L; offset < file.length(); ) {
+            int readByte = buf.writeBytes(in, chunkSize);
+            out.write(buf.nioBuffer());
+            offset +=readByte;
+            buf.clear();
+          }
+          out.close();
+          future.complete(true);
+        } catch (Throwable e) {
+          future.complete(false);
+        } finally {
+            buf.release();
+        }
+        return future;
+      }, executor);
+
+      fileMap.put(path, future);
+    }
+    return fileMap;
+  }
+
   static OzoneClient getOzoneClient(boolean secure) throws IOException {
     OzoneConfiguration conf = new OzoneConfiguration();
     // TODO: If you don't have OM HA configured, change the following as appropriate.
@@ -293,6 +327,8 @@ public class OzoneRpc {
         System.out.println("=== using stream api by MappedByteBuffer===");
       } else if (directApi) {
         System.out.println("=== using stream api by DirectByteBuffer===");
+      } else if (buf) {
+        System.out.println("=== using stream api by DirectByteBuffer===");
       } else {
         System.out.println("=== using async api ===");
       }
@@ -320,7 +356,7 @@ public class OzoneRpc {
 
       List<OzoneDataStreamOutput> streamOuts = new ArrayList<>();
       List<OzoneOutputStream> asyncOuts = new ArrayList<>();
-      if (mapApi || directApi) {
+      if (mapApi || directApi || buf) {
         for (int i = 0; i < paths.size(); i++) {
           OzoneDataStreamOutput out = bucket.createStreamKey("ozonekey_" + i, 128000000,
               config, new HashMap<>());
@@ -347,6 +383,8 @@ public class OzoneRpc {
         map = writeByMappedByteBuffer(paths, streamOuts, executor);
       } else if (directApi) {
         map = writeByDirectByteBuffer(paths, streamOuts, executor);
+      } else if (buf) {
+        map = writeByDirectByteBuf(paths, streamOuts, executor);
       } else {
         map = writeByHeapByteBuffer(paths, asyncOuts, executor);
       }
