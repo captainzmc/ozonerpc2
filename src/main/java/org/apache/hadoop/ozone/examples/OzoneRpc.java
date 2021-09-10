@@ -234,11 +234,12 @@ public class OzoneRpc {
     final CompletableFuture<Boolean> future = new CompletableFuture<>();
     CompletableFuture.supplyAsync(() -> {
       File file = new File(path);
-      ByteBuffer byteBuffer = ByteBuffer.allocateDirect(chunkSize);
+
       try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
         FileChannel in = raf.getChannel();
         for (long offset = 0L; offset < file.length(); ) {
-          byteBuffer.clear();
+          ByteBuffer byteBuffer = ByteBuffer.allocateDirect(chunkSize);
+//          byteBuffer.clear();
           int readByte = in.read(byteBuffer);
           byteBuffer.flip();
           out.write(byteBuffer);
@@ -266,22 +267,27 @@ public class OzoneRpc {
       final CompletableFuture<Boolean> future = new CompletableFuture<>();
       CompletableFuture.supplyAsync(() -> {
         File file = new File(path);
-        ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer(chunkSize);
+        List<ByteBuf> bufList = new ArrayList<>();
         try (RandomAccessFile raf = new RandomAccessFile(file, "r");) {
           FileChannel in = raf.getChannel();
-
           for (long offset = 0L; offset < file.length(); ) {
+            ByteBuf buf = PooledByteBufAllocator.DEFAULT.directBuffer(chunkSize);
             int readByte = buf.writeBytes(in, chunkSize);
             out.write(buf.nioBuffer());
             offset +=readByte;
-            buf.clear();
+            bufList.add(buf);
+//            buf.clear();
+//            if (readByte>0) {
+//              buf.release();
+//            }
           }
           out.close();
+          for(ByteBuf b : bufList) {
+            b.release();
+          }
           future.complete(true);
         } catch (Throwable e) {
           future.complete(false);
-        } finally {
-            buf.release();
         }
         return future;
       }, executor);
@@ -328,7 +334,7 @@ public class OzoneRpc {
       } else if (directApi) {
         System.out.println("=== using stream api by DirectByteBuffer===");
       } else if (buf) {
-        System.out.println("=== using stream api by DirectByteBuffer===");
+        System.out.println("=== using stream api by DirectByteBuf===");
       } else {
         System.out.println("=== using async api ===");
       }
