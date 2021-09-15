@@ -266,8 +266,11 @@ public class OzoneRpc {
       String testBucketName = args[1];
       numFiles = Integer.parseInt(args[2]);
       chunkSize = Integer.parseInt(args[3]);
+      if (args.length > 4)
+        fileSizeInBytes = Long.parseLong(args[4]);
       System.out.println("numFiles:" + numFiles);
       System.out.println("chunkSize:" + chunkSize);
+      System.out.println("fileSize:" + fileSizeInBytes);
       createDirs();
       final ExecutorService executor = Executors.newFixedThreadPool(1000);
       final boolean streamApi = (chunkSize != 0);
