@@ -186,6 +186,33 @@ public class OzoneRpc {
     return fileMap;
   }
 
+  private static Map<String, CompletableFuture<Boolean>> writeByFileRegion(
+          List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
+    Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
+
+    for(int i = 0; i < paths.size(); i ++) {
+
+      String path = paths.get(i);
+      OzoneDataStreamOutput out = outs.get(i);
+      final CompletableFuture<Boolean> future = new CompletableFuture<>();
+      CompletableFuture.supplyAsync(() -> {
+        File file = new File(path);
+        try {
+          out.write(file);
+          out.close();
+          future.complete(true);
+        } catch (Throwable e) {
+          future.complete(false);
+        }
+        return future;
+      }, executor);
+
+      fileMap.put(path, future);
+    }
+
+    return fileMap;
+  }
+
   private static Map<String, CompletableFuture<Boolean>> writeByMappedByteBuffer(
       List<String> paths, List<OzoneDataStreamOutput> outs, ExecutorService executor) {
     Map<String, CompletableFuture<Boolean>> fileMap = new HashMap<>();
@@ -243,10 +270,11 @@ public class OzoneRpc {
       System.out.println("chunkSize:" + chunkSize);
       createDirs();
       final ExecutorService executor = Executors.newFixedThreadPool(1000);
-      final boolean streamApi = (chunkSize > 0);
+      final boolean streamApi = (chunkSize != 0);
+      final boolean byByteBuffer = (chunkSize > 0);
 
       if (streamApi) {
-        System.out.println("=== using stream api ===");
+        System.out.println("=== using " + (byByteBuffer ? "ByteBuffer" : "FileRegion") + " stream api ===");
       } else {
         System.out.println("=== using async api ===");
       }
@@ -298,7 +326,8 @@ public class OzoneRpc {
       // Write key with random name.
       Map<String, CompletableFuture<Boolean>> map;
       if (streamApi) {
-        map = writeByMappedByteBuffer(paths, streamOuts, executor);
+        map = byByteBuffer ? writeByMappedByteBuffer(paths, streamOuts, executor)
+                           : writeByFileRegion(paths, streamOuts, executor);
       } else {
         map = writeByHeapByteBuffer(paths, asyncOuts, executor);
       }
