@@ -73,6 +73,11 @@ public class OzoneRpc {
     String[] cmds = {"/bin/sh","-c","echo 3 > /proc/sys/vm/drop_caches"};
     Process pro = Runtime.getRuntime().exec(cmds);
     pro.waitFor();
+
+    final long filesPerDisk = (numFiles - 1) / storageDir.length + 1;
+    final long diskSpeed = 100 * 1000 * 1000 / 1000; // 100 MB / 1000ms
+    final long msPerFile = (fileSizeInBytes - 1) / diskSpeed + 1;
+    Thread.sleep(filesPerDisk * msPerFile); // wait disk buffer write-back
   }
 
   private static CompletableFuture<Long> writeFileAsync(String path, ExecutorService executor) {
@@ -325,7 +330,6 @@ public class OzoneRpc {
           asyncOuts.add(out);
         }
       }
-
 
       // wait for sync signal
       System.out.println("=== input a new line to start the test ===");
