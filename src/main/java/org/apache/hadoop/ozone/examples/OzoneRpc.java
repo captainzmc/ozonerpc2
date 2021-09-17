@@ -49,6 +49,7 @@ import java.util.concurrent.Executors;
  * It has been tested with secure, non-secure, HA and non-HA Ozone clusters.
  */
 public class OzoneRpc {
+  private static boolean disableChecksum = false;
   private static long numFiles;
   private static int chunkSize;
   private static long fileSizeInBytes = 128000000;
@@ -254,6 +255,8 @@ public class OzoneRpc {
     OzoneConfiguration conf = new OzoneConfiguration();
     // TODO: If you don't have OM HA configured, change the following as appropriate.
     conf.set("ozone.om.address", "9.29.173.57:9862");
+    if (disableChecksum)
+      conf.set("ozone.client.checksum.type", "NONE");
     return OzoneClientFactory.getRpcClient(conf);
   }
 
@@ -268,9 +271,13 @@ public class OzoneRpc {
       chunkSize = Integer.parseInt(args[3]);
       if (args.length > 4)
         fileSizeInBytes = Long.parseLong(args[4]);
+      if (args.length > 5) {
+        disableChecksum = (Integer.parseInt(args[5]) != 0);
+      }
       System.out.println("numFiles:" + numFiles);
       System.out.println("chunkSize:" + chunkSize);
       System.out.println("fileSize:" + fileSizeInBytes);
+      System.out.println("checksum:" + (disableChecksum ? "NONE" : "DEFAULT"));
       createDirs();
       final ExecutorService executor = Executors.newFixedThreadPool(1000);
       final boolean streamApi = (chunkSize != 0);
