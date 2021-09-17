@@ -74,9 +74,12 @@ public class OzoneRpc {
     Process pro = Runtime.getRuntime().exec(cmds);
     pro.waitFor();
 
+    final long safeTime = 5 * 1000L; // sleep extra 5 seconds.
     final long filesPerDisk = (numFiles - 1) / storageDir.length + 1;
     final long diskSpeed = 100 * 1000 * 1000 / 1000; // 100 MB / 1000ms
     final long msPerFile = (fileSizeInBytes - 1) / diskSpeed + 1;
+    final long msSleep = filesPerDisk * msPerFile + safeTime;
+    System.out.println("sleeping " + msSleep + "ms to wait for disk write");
     Thread.sleep(filesPerDisk * msPerFile); // wait disk buffer write-back
   }
 
