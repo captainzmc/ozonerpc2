@@ -70,7 +70,7 @@ public class OzoneRpc {
   }
 
   protected static void dropCache() throws InterruptedException, IOException {
-    String[] cmds = {"/bin/sh","-c","echo 3 > /proc/sys/vm/drop_caches"};
+    String[] cmds = {"/bin/sh","-c","sync; echo 3 > /proc/sys/vm/drop_caches"};
     Process pro = Runtime.getRuntime().exec(cmds);
     pro.waitFor();
 
