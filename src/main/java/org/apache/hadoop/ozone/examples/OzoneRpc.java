@@ -301,6 +301,7 @@ public class OzoneRpc {
     OzoneConfiguration conf = new OzoneConfiguration();
     // TODO: If you don't have OM HA configured, change the following as appropriate.
     conf.set("ozone.om.address", "9.29.173.57:9862");
+    conf.set("ozone.client.checksum.type", "NONE");
     return OzoneClientFactory.getRpcClient(conf);
   }
 
@@ -340,7 +341,7 @@ public class OzoneRpc {
       }
 
       List<String> paths = generateFiles(executor);
-      dropCache();
+//      dropCache();
       // Get an Ozone RPC Client.
       ozoneClient = getOzoneClient(false);
 
