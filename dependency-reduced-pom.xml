@@ -4,7 +4,7 @@
   <groupId>org.apache.hadoop.ozone.examples</groupId>
   <artifactId>ozonerpc2</artifactId>
   <name>ozonerpc2</name>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.3-SNAPSHOT</version>
   <url>http://maven.apache.org</url>
   <build>
     <plugins>
@@ -37,10 +37,24 @@
   </build>
   <dependencies>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>3.8.1</version>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>5.8.2</version>
       <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>opentest4j</artifactId>
+          <groupId>org.opentest4j</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>junit-platform-commons</artifactId>
+          <groupId>org.junit.platform</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>apiguardian-api</artifactId>
+          <groupId>org.apiguardian</groupId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 </project>

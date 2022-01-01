@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.ozone.examples;
 
+import com.beust.jcommander.JCommander;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hdds.client.ReplicationConfig;
 import org.apache.hadoop.hdds.client.ReplicationFactor;
@@ -31,15 +32,14 @@ import org.apache.hadoop.ozone.client.io.OzoneDataStreamOutput;
 import org.apache.hadoop.ozone.client.io.OzoneOutputStream;
 
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -206,8 +206,13 @@ public class OzoneRpc {
       final CompletableFuture<Boolean> future = new CompletableFuture<>();
       CompletableFuture.supplyAsync(() -> {
         File file = new File(path);
+        FileInputStream fileInputStream;
         try {
-          out.write(file);
+          fileInputStream = new FileInputStream(file);
+          FileChannel channel = fileInputStream.getChannel();
+          long size = channel.size();
+          MappedByteBuffer mappedByteBuffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, size);
+          out.write(mappedByteBuffer);
           out.close();
           future.complete(true);
         } catch (Throwable e) {
@@ -269,19 +274,23 @@ public class OzoneRpc {
   }
 
   public static void main(String[] args) throws Exception {
+    CommandArgs commandArgs = new CommandArgs();
+
+    JCommander.newBuilder().addObject(commandArgs).build().parse(args);
+
     System.out.println("Ozone Rpc Demo Begin.");
     OzoneClient ozoneClient = null;
 
+    LaunchSync launchSync = new LaunchSync(55666, commandArgs.groups);
+    launchSync.start();
+
     try {
-      String testVolumeName = args[0];
-      String testBucketName = args[1];
-      numFiles = Integer.parseInt(args[2]);
-      chunkSize = Integer.parseInt(args[3]);
-      if (args.length > 4)
-        fileSizeInBytes = Long.parseLong(args[4]);
-      if (args.length > 5) {
-        disableChecksum = (Integer.parseInt(args[5]) != 0);
-      }
+      String testVolumeName = commandArgs.volume;
+      String testBucketName = commandArgs.bucket;
+      numFiles = commandArgs.fileNum;
+      chunkSize = commandArgs.chunkSize;
+      fileSizeInBytes = commandArgs.fileSize;
+      disableChecksum = commandArgs.disableChecksum;
       System.out.println("numFiles:" + numFiles);
       System.out.println("chunkSize:" + chunkSize);
       System.out.println("fileSize:" + fileSizeInBytes);
@@ -335,9 +344,11 @@ public class OzoneRpc {
       }
 
       // wait for sync signal
-      System.out.println("=== input a new line to start the test ===");
-      System.out.print(">>> ");
-      new Scanner(System.in).nextLine();
+      launchSync.sendReady();
+      System.out.println("=== Wait All Client Ready ===");
+      System.out.println("...");
+      launchSync.waitAllReady();
+      System.out.println("=== All Ready! Start Test ===");
 
       long start = System.currentTimeMillis();
       // Write key with random name.
