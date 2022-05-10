@@ -30,7 +30,7 @@
   </property>
    <property>
       <name>ozone.scm.datanode.id.dir</name>
-      <value>/data/ozone-physical-cluster/data/iddir</value>
+      <value>/data/ozone-physical-cluster/data/iddir2</value>
    </property>
    <property>
       <name>ozone.metadata.dirs</name>
